@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  S3FileViewer
+
+  SAM Template for S3FileViewer
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+
+Resources:
+  InvoiceSourceFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: invoice_bucket_source/
+      Handler: app.lambda_handler
+      Runtime: python3.7
+      Policies:
+        - Statement: 
+          - Effect: Allow
+            Action:
+              - 's3:ListBucket'
+            Resource: 
+             - '*'
+      Events:
+        InvoiceSource:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /invoiceSource
+            Method: get
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  InvoiceSourceApi:
+    Description: "API Gateway endpoint URL for Dev stage for the InvoiceSource Function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Dev/invoiceSource/"
+  InvoiceSourceFunction:
+    Description: "Invoice Source Function ARN"
+    Value: !GetAtt InvoiceSourceFunction.Arn
+  InvoiceSourceFunctionIamRole:
+    Description: "Implicit IAM Role created for InvoiceSource function"
+    Value: !GetAtt InvoiceSourceFunctionRole.Arn
