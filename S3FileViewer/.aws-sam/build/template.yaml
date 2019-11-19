@@ -1,0 +1,40 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'S3FileViewer
+
+  SAM Template for S3FileViewer
+
+  '
+Globals:
+  Function:
+    Timeout: 3
+Outputs:
+  InvoiceSourceApi:
+    Description: API Gateway endpoint URL for Dev stage for the InvoiceSource Function
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Dev/invoiceSource/
+  InvoiceSourceFunction:
+    Description: Invoice Source Function ARN
+    Value:
+      Fn::GetAtt:
+      - InvoiceSourceFunction
+      - Arn
+  InvoiceSourceFunctionIamRole:
+    Description: Implicit IAM Role created for InvoiceSource function
+    Value:
+      Fn::GetAtt:
+      - InvoiceSourceFunctionRole
+      - Arn
+Resources:
+  InvoiceSourceFunction:
+    Properties:
+      CodeUri: InvoiceSourceFunction
+      Events:
+        InvoiceSource:
+          Properties:
+            Method: get
+            Path: /invoiceSource
+          Type: Api
+      Handler: app.lambda_handler
+      Runtime: python3.6
+    Type: AWS::Serverless::Function
+Transform: AWS::Serverless-2016-10-31
