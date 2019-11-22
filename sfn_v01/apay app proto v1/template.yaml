@@ -1,0 +1,62 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Prototype of Step Function for Levis Strauss & Co. in SAM
+
+#  | _ \__ _ _ _ __ _ _ __  ___| |_ ___ _ _ ___
+#  |  _/ _` | '_/ _` | '  \/ -_)  _/ -_) '_(_-<
+#  |_| \__,_|_| \__,_|_|_|_\___|\__\___|_| /__/
+
+Parameters:
+  ClientName: 
+    Type: String
+    Description: Client Namespace
+
+  Version:
+    Type: String
+    Description: Version of Application
+
+#    ___ _     _          _    
+#   / __| |___| |__  __ _| |___
+#  | (_ | / _ \ '_ \/ _` | (_-<
+#   \___|_\___/_.__/\__,_|_/__/
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 30
+
+
+Resources:
+#   _               _        _         
+#  | |   __ _ _ __ | |__  __| |__ _ ___
+#  | |__/ _` | '  \| '_ \/ _` / _` (_-<
+#  |____\__,_|_|_|_|_.__/\__,_\__,_/__/
+  PDFResaveFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      Description: This function re-saves the file and prepares the file for Textract Processing
+      CodeUri: apay-v1.0-pdf-resave-v1.0.0/
+      Handler: app.lambda_handler
+      Runtime: python3.7
+      Events:
+        PDFResaveApi:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /pdf/utils/resave
+            Method: post
+
+            
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  PDFResaveApi:
+    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/pdf/utils/resave"
+  PDFResaveFunction:
+    Description: "Resaves PDF"
+    Value: !GetAtt PDFResaveFunction.Arn
+  PDFResaveFunctionIamRole:
+    Description: "Implicit IAM Role created for Hello World function"
+    Value: !GetAtt PDFResaveFunctionRole.Arn

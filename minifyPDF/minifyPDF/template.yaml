@@ -1,0 +1,39 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  minifyPDF
+
+  Saves the first, second to last and last page of a PDF document to reduce Textract spend
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 30
+
+Resources:
+  APAY_V1.0_MinifyPDFFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: apay_v1.0_minify_pdf_v1/
+      Handler: app.lambda_handler
+      Runtime: python3.7
+      Events:
+        HelloWorld:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /PDFReduce
+            Method: post
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  MinifyPDFAPIEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage for minify a PDF"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/PDFUtils/"
+  APAY_V1.0_MinifyPDFFunction:
+    Description: "Lambda Function that supplies a minified PDF document"
+    Value: !GetAtt APAY_V1.0_MinifyPDF.Arn
+  APAY_V1.0_MinifyPDFunctionIamRole:
+    Description: "Implicit IAM Role created for Hello World function"
+    Value: !GetAtt APAY_V1.0_MinifyPDFFunctionRole.Arn

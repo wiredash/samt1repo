@@ -1,0 +1,235 @@
+AWSTemplateFormatVersion: '2019-11-19'
+Description: 'AdaptivePay Version 1.0'
+Resources:
+
+  # Step function
+  levi-invoice-masterSummary-paymentDisabled-v1-SF:
+    Type: 'AWS::StepFunctions::StateMachine'
+    Properties:
+      DefinitionString: !Sub |
+        {
+          "Comment": "AdaptivePay AWS Step Function (core)",
+          "StartAt": "ConvertPDF",
+            "States": {
+              "ConvertPDF" : {
+                "Type": "Task",
+                "Resource": "${apay-v1.0-s3-pdfcleaner.Arn}",
+                "TimeoutSeconds": 300,
+                "HeartbeatSeconds": 60,
+                "Next": "ProcessTextract"
+              },
+              "ProcessTextract": {
+                "Type": "Task",
+                "Resource": "${apay-v1.0-s3-textract.Arn}",
+                "TimeoutSeconds": 300,
+                "HeartbeatSeconds": 60,
+                "Catch": [ {
+                  "ErrorEquals": ["TextractJobFailed"],
+                  "Next": "TextractJobFailedRetry"
+                }, {
+                  "ErrorEquals": ["States.ALL"],
+                  "Next": "CatchAllFallback"
+                } ],      
+                "Next": "ParseLeviMasterInvoice"
+              },
+              "ParseLeviMasterInvoice": {
+                "Type": "Task",
+                "Resource": "${HelloWorldFunction.Arn}",
+                "TimeoutSeconds": 300,
+                "HeartbeatSeconds": 60,
+                "Catch": [ {
+                  "ErrorEquals": ["CustomerNotFoundError"],
+                  "Next": "CustomerNotFoundError"
+                },
+                {
+                  "ErrorEquals": ["ParseFailed"],
+                  "Next": "FixDataError"         
+                }],       
+                "Next": "SaveInvoice"
+            },
+              "CustomerNotFoundError": {
+                "Type": "Task",
+                "Resource": "${apay-v1.0-ses-customernotfound.Arn}",
+                "TimeoutSeconds": 300,
+                "HeartbeatSeconds": 60,
+                "Next": "Terminate"
+            },
+              "Terminate": {
+                "Type": "Succeed"
+              },
+              "FixDataError": {
+                "Type": "Task",
+                "Resource": "arn:aws:lambda:us-east-1:037026205615:function:sf-err-CustomerNotFound",
+                "TimeoutSeconds": 300,
+                "HeartbeatSeconds": 60,
+                "End": true
+            }, 
+              "SaveInvoice": {
+                "Type": "Task",
+                "Resource": "${apay-v1.0-ddb-saveinvoice.Arn}",
+                "TimeoutSeconds": 300,
+                "HeartbeatSeconds": 60,     
+                "Next": "CheckCustomerEmail"
+            }, 
+              "CheckCustomerEmail": {
+            "Type": "Choice",
+            "Choices": [
+              {
+                  "Not": {
+                    "Variable": "$.body.customerEmail",
+                    "StringEquals": ""
+                  },
+                  "Next": "SendEmailToCustomerNoPaymentLink"
+              } 
+            ],
+            "Default": "CustomerEmailNotFoundException "
+          },
+          "CustomerEmailNotFoundException ": {
+            "Type": "Fail",
+            "Cause": "No customer email found!"
+          },
+              "SendEmailToCustomerNoPaymentLink": {
+                "Type": "Task",
+                "Resource": "${apay-v1.0-ses-emailinvoice.Arn}",
+                "TimeoutSeconds": 300,
+                "HeartbeatSeconds": 60,
+                "End": true
+            },    
+              "TextractJobFailedRetry": {
+                "Type": "Task",
+                "Resource": "${apay-v1.0-s3-textract.Arn}",
+                "TimeoutSeconds": 300,
+                "HeartbeatSeconds": 60,
+                "Retry": [ {
+                  "ErrorEquals": ["TextractJobFailed"],
+                  "IntervalSeconds": 20,
+                  "MaxAttempts": 2,
+                  "BackoffRate": 2.0
+                } ],
+                "End": true
+            },
+              "CatchAllFallback": {
+                "Type": "Pass",
+                "Result": "Processing Terminated with Unknown Error",
+                "End": true
+              }    
+          }
+        }
+      RoleArn: !GetAtt 'levi-invoice-masterSummary-paymentDisabled-v1-SF-role.Arn'
+
+# Lambda Functions
+ apay-v1.0-s3-pdfcleaner:
+    Type: AWS::Lambda::Function 
+    Properties:
+      CodeUri: lambda/application/core/pdfcleaner
+      Handler: pdfcleaner.handler
+      Runtime: python3.7
+
+ apay-v1.0-s3-textract:
+    Type: AWS::Lambda::Function 
+    Properties:
+      CodeUri: lambda/application/core/textract
+      Handler: textract.handler
+      Runtime: python3.7
+
+ apay-v1.0-s3-levi-invoicemaster-parser:
+    Type: "AWS::Lambda::Function"
+    Properties: 
+      Handler: "invoice_master.handler"
+      Role: 
+        Fn::GetAtt: 
+          - "LambdaExecutionRole"
+          - "Arn"
+      CodeUri: lambda/application/client/levi/invoice_master
+      Runtime: "nodejs10.0"
+      Timeout: 25
+      TracingConfig:
+        Mode: "Active"
+
+ apay-v1.0-ddb-saveinvoice:
+    Type: AWS::Lambda::Function 
+    Properties:
+      CodeUri: lambda/application/core/saveinvoice
+      Handler: saveinvoice.handler
+      Runtime: python3.7
+
+ apay-v1.0-ses-emailinvoice:
+    Type: AWS::Lambda::Function 
+    Properties:
+      CodeUri: lambda/application/core/emailinvoice
+      Handler: emailinvoice.handler
+      Runtime: python3.7
+
+ apay-v1.0-ses-customernotfound:
+    Type: AWS::Lambda::Function 
+        Properties:
+          CodeUri: lambda/application/core/customernotfound
+          Handler: customernotfound.handler
+          Runtime: python3.7       
+
+  # IAM roles
+  levi-invoice-masterSummary-paymentDisabled-v1-SF-role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2019-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: !Sub 'states.${AWS::Region}.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      Policies:
+      - PolicyName: lambda
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action: 'lambda:InvokeFunction'
+            Resource:
+            - !GetAtt 'apay-v1.0-s3-pdfcleaner.Arn'            
+            - !GetAtt 'apay-v1.0-s3-textract.Arn'
+            - !GetAtt 'apay-v1.0-s3-levi-invoicemaster-parser.Arn'
+            - !GetAtt 'apay-v1.0-ddb-saveinvoice'
+            - !GetAtt 'apay-v1.0-ses-emailinvoice'
+            - !GetAtt 'apay-v1.0-ses-customernotfound'
+
+  
+# LambdaZipsBucket:
+#         Type: AWS::S3::Bucket
+#     CopyZips:
+#         Type: Custom::CopyZips
+#         Properties:
+#           ServiceToken: !GetAtt 'CopyZipsFunction.Arn'
+#           DestBucket: !Ref 'LambdaZipsBucket'
+#           SourceBucket: !Ref 'QSS3BucketName'
+#           Prefix: !Ref 'QSS3KeyPrefix'
+#           Objects:
+#             - functions/packages/MyFunction/lambda.zip
+
+# MyFunction:
+#     DependsOn: CopyZips
+#     Type: AWS::Lambda::Function
+#     Properties:
+#       Code:
+#         S3Bucket: !Ref 'LambdaZipsBucket'
+#         S3Key: !Sub '${QSS3KeyPrefix}functions/packages/MyFunction/lambda.zip'
+
+# Lambda functions
+  # FunctionSendMessage:
+  #   Type: 'AWS::Lambda::Function'
+  #   Properties:
+  #     Code:
+  #       ZipFile: |
+  #         'use strict'
+  #         module.exports.handler = (event, context, cb) => {
+  #           console.log(JSON.stringify(event));
+  #           if (Math.random() < 0.3) { // fail 30% of the time
+  #             cb(new Error('error happened'));
+  #           } else {
+  #             cb(null, {});
+  #           }
+  #         };
+  #     Handler: 'index.handler'
+  #     Role: !GetAtt 'RoleSendMessage.Arn'
+  #     Runtime: 'nodejs6.10'     
+
+  # https://github.com/widdix/aws-step-functions-example/blob/master/template.yml 
