@@ -34,7 +34,7 @@ def lambda_handler(event, context):
     pdfdata = kk.read()
     # content = base64.b64decode(pdfFileObj)
     # fileobj = BytesIO(pdfFileObj)
-    s3.upload_fileobj(kk, 'apay-levis-invoice-master-out', '_3tmp.pdf')
+    # s3.upload_fileobj(kk, 'apay-levis-invoice-master-out', '_3tmp.pdf')
     
     # dirpath = os.getcwd()
     # print("Current directory is : " + dirpath)      
