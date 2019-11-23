@@ -51,7 +51,8 @@ Resources:
             Path: /pdf/utils/resave
             Method: post
       Policies:
-      - S3CrudPolicy: {}
+      - S3CrudPolicy: 
+          BucketName: "*"
 
             
 Outputs:
