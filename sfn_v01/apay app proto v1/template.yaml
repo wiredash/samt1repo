@@ -23,6 +23,11 @@ Parameters:
 
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
+  Api:
+    # API Gateway regional endpoints
+    EndpointConfiguration: REGIONAL    
+    BinaryMediaTypes:
+      - application~1pdf
   Function:
     Timeout: 30
 

@@ -1,95 +1,99 @@
-import json
-import subprocess
-from subprocess import Popen
-import os
-import sys
 import boto3
-import glob
+import json
+from PyPDF2 import PdfFileMerger
+from PyPDF2 import PdfFileWriter
+import PyPDF2
+import os
+
+
 import base64
 from io import BytesIO
-from PyPDF2 import PdfFileMerger
-import PyPDF2
-# import requests
 
-
-def lambda_handler(event, context):
-    s3 = boto3.client('s3')
-    pdf64 = event["body"]
-
-    # Need this line as it does 'b'b'pdfdatacontent'.
-    # pdf64 = pdf64[2:].encode('utf-8')
-
-    # buffer = BytesIO()
-    content = base64.b64decode(pdf64)
-
-    fileobj = BytesIO(content)
-    # newfile = BytesIO()
-    merger = PdfFileMerger()
-    pdfFileObj = fileobj
-    merger.append(fileobj = pdfFileObj, pages = (0,1))
+def handler(event, context):
+   
+    apiCall = False
     
-    output = open("/tmp/document-output.pdf", "wb")
-    merger.write(output)
-    kk = open("/tmp/document-output.pdf", "rb")
-    pdfdata = kk.read()
-    # content = base64.b64decode(pdfFileObj)
-    # fileobj = BytesIO(pdfFileObj)
-    # s3.upload_fileobj(kk, 'apay-levis-invoice-master-out', '_3tmp.pdf')
+    #print(event)
     
-    # dirpath = os.getcwd()
-    # print("Current directory is : " + dirpath)      
-    # os.chdir('/tmp') 
-    # s3 = boto3.client('s3') 
-    # fileName = '916266_T.pdf'
-    # path = "/tmp/" + fileName 
-    # data = s3.get_object(Bucket="apay-levis-invoice-master-in", Key="916264.pdf")
-    # contents = data['Body'].read()
-    # f = open(path, 'wb')
-    # ret = f.write(str(contents))
-    # print("Number of bytes written: ")
-    # print(ret)    
-    # f.close()
+    try:
+        method = event['httpMethod']
+        apiCall = True
+    except KeyError:
+        print("Cannot find http method, must be lambda Call")
+        
+    if apiCall == True:
+        jsonStream = json.loads(event['body'])
+    else:
+        jsonStream = event 
+        
+    print(str(jsonStream))
 
-    # p = Popen([path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+    try:
+        s3 = boto3.client('s3')
+        dirpath = os.getcwd()
+        print("Current directory is : " + dirpath)    
+    
+        os.chdir('/tmp')  
+        bucket = jsonStream["s3Bucket"]
+        fileName = jsonStream['fileName']
+        try:
+            ignorePages = 0
+            ignorePages = jsonStream["ignorePages"]
+        except:
+            pass
+        
+        resultBucket = jsonStream["resultS3bucket"]
+        resultFileName = jsonStream["resultFile"]
+        resultPath = '/tmp/result_' + fileName
+        
+        path = "/tmp/" + fileName  
+        
+        print('Path:' + path)
+        print('S3 Bucket:' + bucket)
+        print('File name:' + fileName)    
+        print('Result S3 Bucket:' + resultBucket) 
+        print('Result File name:' + resultFileName)   
+        
+        data = s3.get_object(Bucket=bucket, Key=fileName)
+        fileContents = data['Body'].read()
 
-    # output, errors = p.communicate()
-    # print("Error: " + errors)
-    # print("Output: " + output)    
-    """Sample pure Lambda function
-
-    Parameters
-    ----------
-    event: dict, required
-        API Gateway Lambda Proxy Input Format
-
-        Event doc: https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html#api-gateway-simple-proxy-for-lambda-input-format
-
-    context: object, required
-        Lambda Context runtime methods and attributes
-
-        Context doc: https://docs.aws.amazon.com/lambda/latest/dg/python-context-object.html
-
-    Returns
-    ------
-    API Gateway Lambda Proxy Output Format: dict
-
-        Return doc: https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html
-    """
-
-    # try:
-    #     ip = requests.get("http://checkip.amazonaws.com/")
-    # except requests.RequestException as e:
-    #     # Send some context about this error to Lambda Logs
-    #     print(e)
-
-    #     raise e
-    pdfdata = str(base64.b64encode(pdfdata))
-    # pdfdata = pdfdata[2:].encode('utf-8')
-
-    return {
-        "statusCode": 200,
-        "headers": {"Content-type" : "application/pdf"},
-        "isBase64Encoded": "true",
-        "body":pdfdata
-        }
+        f = open(path, 'wb')
+        ret = f.write(fileContents)
+        print("Number of bytes written: ")
+        print(ret)    
+        f.close()
+        
+        
+        fileobj = BytesIO(fileContents)
+        merger = PdfFileMerger()
+        pdfFileObj = fileobj
+        merger.append(fileobj = pdfFileObj, pages = (0,1))
+        
+        pdfReader = PyPDF2.PdfFileReader(pdfFileObj)
+        numPages = pdfReader.numPages-ignorePages
+        if numPages>2:
+            merger.append(fileobj = pdfFileObj, pages = (numPages-2, numPages))
+        elif pdfReader.numPages == 2:
+            merger.append(fileobj = pdfFileObj, pages = (1,2))
+            
+        output = open(resultPath, "wb")
+        merger.write(output)
+        output = open(resultPath, "rb")
+        s3.upload_fileobj(output, resultBucket, resultFileName)
+        
+        return({
+            "statusCode" : 200,
+            'body' : json.dumps(jsonStream)
+        })  
+        
+    except KeyError:
+        if apiCall == True:
+            return {
+                'statusCode': 500,
+                'body': {'error' : 'Error processing file'}
+            }
+        else:
+            raise ValueError('Error processing file')        
+        
+        
     
