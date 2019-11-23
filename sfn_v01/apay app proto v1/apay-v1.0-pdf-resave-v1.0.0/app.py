@@ -9,7 +9,7 @@ import os
 import base64
 from io import BytesIO
 
-def handler(event, context):
+def lambda_handler(event, context):
    
     apiCall = False
     
