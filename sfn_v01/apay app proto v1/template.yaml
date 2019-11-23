@@ -50,6 +50,8 @@ Resources:
           Properties:
             Path: /pdf/utils/resave
             Method: post
+      Policies:
+      - S3CrudPolicy: {}
 
             
 Outputs:
